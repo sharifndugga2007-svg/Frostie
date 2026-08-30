@@ -248,10 +248,11 @@ export default function App() {
       const ws = new WebSocket(`${protocol}//${location.host}/live?${params.toString()}`);
       wsRef.current = ws;
 
-      const inputAudioCtx = new AudioContext({ sampleRate: 16000 });
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      const inputAudioCtx = new AudioContextClass({ sampleRate: 16000 });
       inputAudioCtxRef.current = inputAudioCtx;
 
-      const outputAudioCtx = new AudioContext({ sampleRate: 24000 });
+      const outputAudioCtx = new AudioContextClass({ sampleRate: 24000 });
       outputAudioCtxRef.current = outputAudioCtx;
       nextStartTimeRef.current = outputAudioCtx.currentTime;
 
@@ -333,19 +334,27 @@ export default function App() {
         const msg = JSON.parse(event.data);
         if (msg.type === "connected") {
            setIsConnected(true);
-           if (mode === "interpreter") {
-             if (userName) {
-               ws.send(JSON.stringify({ text: `Hello, I'm ${userName}. I need your help interpreting today. Please briefly confirm.` }));
-             } else {
-               ws.send(JSON.stringify({ text: `Hello! I need an interpreter. Can you help me?` }));
-             }
+           
+           let contextMessage = "";
+           if (messages.length > 0) {
+             const recentMessages = messages.slice(-15).map((m: any) => `${m.role === 'user' ? (userName || 'User') : 'Frostie'}: ${m.text}`).join('\n');
+             contextMessage = `[SYSTEM MESSAGE: The user has reconnected. Here is the transcript of your recent past conversation for context:\n${recentMessages}]\n\nHello Frostie, I'm back! Let's continue. Please give me a brief, warm welcome back.`;
            } else {
-             if (userName) {
-               ws.send(JSON.stringify({ text: `Hello! I am ${userName}. Please explain what my name means, and then introduce yourself.` }));
+             if (mode === "interpreter") {
+               if (userName) {
+                 contextMessage = `Hello, I'm ${userName}. I need your help interpreting today. Please briefly confirm.`;
+               } else {
+                 contextMessage = `Hello! I need an interpreter. Can you help me?`;
+               }
              } else {
-               ws.send(JSON.stringify({ text: `Hello! Please ask me for my name.` }));
+               if (userName) {
+                 contextMessage = `Hello! I am ${userName}. Please explain what my name means, and then introduce yourself.`;
+               } else {
+                 contextMessage = `Hello! Please ask me for my name.`;
+               }
              }
            }
+           ws.send(JSON.stringify({ text: contextMessage }));
         }
         if (msg.type === "error") {
            setError(msg.message);
@@ -387,15 +396,16 @@ export default function App() {
       };
 
     } catch (err: any) {
-      console.error("Failed to connect", err);
       if (
         err.name === 'NotAllowedError' || 
         err.name === 'PermissionDeniedError' || 
         err.message?.includes('Permission denied') ||
         err.message?.includes('Permission dismissed')
       ) {
+        console.warn("Microphone permission denied by user.");
         setError("Microphone access denied. Please click the microphone icon in your browser's address bar to allow access, then try again.");
       } else {
+        console.error("Failed to connect", err);
         setError("Failed to connect: " + (err.message || String(err)));
       }
       disconnect();
@@ -407,17 +417,38 @@ export default function App() {
       wsRef.current.close();
       wsRef.current = null;
     }
-    if (processorRef.current) processorRef.current.disconnect();
-    if (sourceRef.current) sourceRef.current.disconnect();
-    if (streamRef.current) streamRef.current.getTracks().forEach((t) => t.stop());
-    if (inputAudioCtxRef.current && inputAudioCtxRef.current.state !== 'closed') inputAudioCtxRef.current.close();
-    if (outputAudioCtxRef.current && outputAudioCtxRef.current.state !== 'closed') outputAudioCtxRef.current.close();
+    if (processorRef.current) {
+      try { processorRef.current.disconnect(); } catch (e) {}
+      processorRef.current = null;
+    }
+    if (sourceRef.current) {
+      try { sourceRef.current.disconnect(); } catch (e) {}
+      sourceRef.current = null;
+    }
+    if (streamRef.current) {
+      try { streamRef.current.getTracks().forEach((t) => t.stop()); } catch (e) {}
+      streamRef.current = null;
+    }
+    if (inputAudioCtxRef.current && inputAudioCtxRef.current.state !== 'closed') {
+      try { inputAudioCtxRef.current.close(); } catch (e) {}
+    }
+    if (outputAudioCtxRef.current && outputAudioCtxRef.current.state !== 'closed') {
+      try { outputAudioCtxRef.current.close(); } catch (e) {}
+    }
 
     if (recognitionRef.current) {
       try { recognitionRef.current.stop(); } catch(e) {}
       recognitionRef.current = null;
     }
     if (transcriptionTimeoutRef.current) clearTimeout(transcriptionTimeoutRef.current);
+    if (genieTranscriptTimeoutRef.current) clearTimeout(genieTranscriptTimeoutRef.current);
+    if (speakTimeoutRef.current) clearTimeout(speakTimeoutRef.current);
+
+    // Stop all currently playing audio chunks
+    scheduledSourcesRef.current.forEach(source => {
+      try { source.stop(); } catch(e) {}
+    });
+    scheduledSourcesRef.current = [];
 
     setIsConnected(false);
     setIsSpeaking(false);
@@ -1053,7 +1084,7 @@ export default function App() {
                </div>
                
                <div className="text-center text-[9px] text-neutral-600 font-medium tracking-widest uppercase mt-4 mb-2">
-                 Developed by Hive studios creator Ndugga Sharif
+                 Founder & Designer: Ndugga Sharif <span className="mx-2 opacity-50">•</span> Name Designer: Barbara
                </div>
             </div>
           )}
