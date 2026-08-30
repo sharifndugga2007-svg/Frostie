@@ -1,0 +1,8 @@
+{
+  "name": "Frostie Live AI",
+  "description": "An interactive live AI avatar that speaks and listens in real-time.",
+  "requestFramePermissions": [
+    "microphone"
+  ],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
