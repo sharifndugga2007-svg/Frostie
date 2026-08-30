@@ -176,7 +176,11 @@ export default function App() {
   }
 
   const saveMessage = async (role: "user" | "genie", text: string) => {
-    if (!user || !text.trim()) return;
+    if (!text.trim()) return;
+    if (!user) {
+      setMessages(prev => [...prev, { id: Date.now().toString() + Math.random().toString(), role, text }]);
+      return;
+    }
     try {
       await addDoc(collection(db, "users", user.uid, "messages"), {
         role,
@@ -978,27 +982,29 @@ export default function App() {
                 animate={{ opacity: 1 }} 
                 className="text-neutral-400 text-sm"
               >
-                {!user ? "Please sign in to continue." :
-                 isConnected ? "Connection established. Speak freely..." : "Initiate connection to begin conversation."}
+                {!isConnected ? "Initiate connection to begin conversation." : "Connection established. Speak freely..."}
               </motion.p>
             )}
           </div>
 
-          {!user ? (
-            <button
-              onClick={handleSignIn}
-              className="bg-white text-neutral-950 font-medium py-3 px-6 rounded-lg hover:bg-neutral-200 transition-colors shadow-[0_0_15px_rgba(255,255,255,0.2)]"
-            >
-              Sign in with Google
-            </button>
-          ) : !isConnected ? (
-            <button
-              onClick={connect}
-              className="group relative flex items-center gap-3 px-8 py-4 rounded-full font-medium text-lg transition-all duration-500 overflow-hidden bg-white text-neutral-950 hover:bg-neutral-200 hover:scale-105 shadow-[0_0_30px_rgba(255,255,255,0.1)]"
-            >
-              <Mic className="w-5 h-5" />
-              <span className="relative z-10">Connect System</span>
-            </button>
+          {!isConnected ? (
+            <div className="flex flex-col items-center gap-4">
+              <button
+                onClick={connect}
+                className="group relative flex items-center gap-3 px-8 py-4 rounded-full font-medium text-lg transition-all duration-500 overflow-hidden bg-white text-neutral-950 hover:bg-neutral-200 hover:scale-105 shadow-[0_0_30px_rgba(255,255,255,0.1)]"
+              >
+                <Mic className="w-5 h-5" />
+                <span className="relative z-10">Connect System</span>
+              </button>
+              {!user && (
+                <button
+                  onClick={handleSignIn}
+                  className="text-neutral-500 text-sm hover:text-white transition-colors"
+                >
+                  Sign in with Google to save history
+                </button>
+              )}
+            </div>
           ) : (
             <div className="flex flex-col gap-4 w-full max-w-lg z-20">
                {/* Quick Commands */}
